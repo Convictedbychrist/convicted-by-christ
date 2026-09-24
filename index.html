@@ -236,7 +236,7 @@ function renderHome(){
   });
   html+=`</ol></div>
   <div class="homeactions"><a class="btn" href="#/pick">Send my answers</a></div>
-  <p class="finish">Finish all 24 lessons to receive a recovery Bible, a certificate of completion, and a footprint with your name and its meaning printed on it.</p>
+  <p class="finish">Finish all 24 lessons to receive a certificate of completion and a footprint with your name and its meaning printed on it.</p>
   <div class="foot">Your answers are saved in this browser on this device. <button id="reset" type="button">Erase all my answers</button></div></main>`;
   app.innerHTML=html;
   document.getElementById("nm").addEventListener("input",e=>{state.name=e.target.value; save();});
@@ -343,7 +343,9 @@ function parseList(s){ return [...new Set(s.split(",").map(Number).filter(n=>n>=
 const plain=h=>{ const d=document.createElement("div"); d.innerHTML=h; return d.textContent.replace(/\s+/g," ").trim(); };
 const ADDR_REQ=["name","street","city","state","zip"];
 function addrOk(){ const a=state.addr||{}; return ADDR_REQ.every(k=>(a[k]||"").trim()) && /^\d{5}(-\d{4})?$/.test((a.zip||"").trim()); }
-function studentName(){ return (state.addr&&state.addr.name||"").trim() || (state.name||"").trim(); }
+function studentName(){ return (state.name||"").trim() || (state.addr&&state.addr.name||"").trim(); }
+function studentEmail(){ return (state.email||"").trim(); }
+const emailOk=v=>!v || /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v);
 function lessonText(L){
   const val=id=>state.a[L.n+":"+id];
   const out=[`LESSON ${L.n}: ${L.title.toUpperCase()}`, `Memory verse: ${L.ref}`];
@@ -366,7 +368,7 @@ function buildEmail(list){
   const name=studentName()||"(name not given)";
   const range=list.length===1?`Lesson ${list[0]}`:`Lessons ${list.join(", ")}`;
   const subject=`${list.includes(24)?"COMPLETED STUDY: ":""}New Discipleship Bible Study, ${range}, ${name}`;
-  const parts=[`Student: ${name}`];
+  const parts=[`Student: ${name}`]; if(studentEmail()) parts.push(`Email: ${studentEmail()}`);
   if(list.includes(24)){ const a=state.addr; parts.push("", "MAIL REWARD TO:", a.name, a.street+(a.unit?`, ${a.unit}`:""), `${a.city}, ${a.state} ${a.zip}`, "", "This student has completed all 24 lessons."); }
   parts.push(`Sent: ${new Date().toLocaleDateString(undefined,{year:"numeric",month:"long",day:"numeric"})}`);
   for(const n of list){ parts.push("", "────────────────────", lessonText(LESSONS.find(L=>L.n===n))); }
@@ -397,7 +399,7 @@ function renderCelebrate(list){
     <h1>CONGRATULATIONS!</h1><p class="did">You did it!</p>
     <p class="note">Praise God, you made it! I pray that you have learned more about your Heavenly Father and how much He loves you and that He has a plan and purpose for your life.</p>
     <p class="sig">Carolyn Evans, Isaiah 42:16 Ministries</p>
-    <p class="reward">You've finished all 24 lessons. Next, confirm your name and mailing address so we can send your recovery Bible, certificate of completion, and your footprint.</p>
+    <p class="reward">You've finished all 24 lessons. Next, confirm your name and mailing address so we can send your certificate of completion and your footprint.</p>
     <a class="btn" href="#/address/${list.join(",")}">Continue</a></div></section>`;
   window.scrollTo(0,0);
   confetti();
@@ -418,15 +420,18 @@ function renderAddress(list){
   const a=Object.assign({name:state.name||""},state.addr||{});
   const f=(k,label,opt,ac,extra="")=>`<div class="${k==="city"?"city":""}"><label for="a-${k}">${label}${opt?' <span class="opt">(optional)</span>':""}</label><input id="a-${k}" data-k="${k}" autocomplete="${ac}" value="${esc(a[k]||"")}" ${extra}></div>`;
   app.innerHTML=`<div class="bar"><div class="wrap"><button class="back" type="button" onclick="history.back()">‹ Back</button><span class="status"></span></div></div>
-  <main class="wrap page form"><h2>Where should we mail your reward?</h2><p class="lede">Please check that your full name and mailing address are correct. This is where your recovery Bible, certificate, and footprint will be sent.</p>
+  <main class="wrap page form"><h2>Where should we mail your reward?</h2><p class="lede">Please check that your full name and mailing address are correct. This is where your certificate and footprint will be sent.</p>
   ${f("name","Full name",false,"name")}
+  <label for="a-email">Email address <span class="opt">(optional)</span></label><input id="a-email" type="email" autocomplete="email" inputmode="email" value="${esc(state.email||"")}">
   ${f("street","Street address or PO box",false,"address-line1")}
   ${f("unit","Apartment, unit, or suite",true,"address-line2")}
   <div class="grid3">${f("city","City",false,"address-level2")}${f("state","State",false,"address-level1",'maxlength="20"')}${f("zip","ZIP code",false,"postal-code",'inputmode="numeric" maxlength="10"')}</div>
   <p class="err" id="err" role="alert"></p>
   <button class="btn wide" type="button" id="go" style="margin-top:12px">Confirm my address</button></main>`;
   window.scrollTo(0,0);
-  const ins=[...app.querySelectorAll(".form input")];
+  const ae=document.getElementById("a-email");
+  ae.addEventListener("input",()=>{ state.email=ae.value; ae.removeAttribute("aria-invalid"); save(); });
+  const ins=[...app.querySelectorAll(".form input[data-k]")];
   ins.forEach(i=>i.addEventListener("input",()=>{ state.addr=state.addr||{}; state.addr[i.dataset.k]=i.value; if(i.dataset.k==="name") state.name=i.value; i.removeAttribute("aria-invalid"); save(); }));
   document.getElementById("go").onclick=()=>{
     state.addr=state.addr||{}; ins.forEach(i=>state.addr[i.dataset.k]=i.value.trim()); save();
@@ -434,6 +439,7 @@ function renderAddress(list){
     ins.forEach(i=>i.setAttribute("aria-invalid", missing.includes(i)?"true":"false"));
     const zip=document.getElementById("a-zip");
     if(missing.length){ document.getElementById("err").textContent="Fill in your "+missing.map(i=>i.previousElementSibling.textContent.replace(" (optional)","").replace(/^(Full|Street|City|State)/,s=>s.toLowerCase())).join(", ")+"."; missing[0].focus(); return; }
+    if(!emailOk(ae.value.trim())){ ae.setAttribute("aria-invalid","true"); document.getElementById("err").textContent="Check your email address. It should look like name@example.com, or leave it blank."; ae.focus(); return; }
     if(!/^\d{5}(-\d{4})?$/.test(zip.value.trim())){ zip.setAttribute("aria-invalid","true"); document.getElementById("err").textContent="Enter a 5-digit ZIP code."; zip.focus(); return; }
     location.hash="#/send/"+list.join(",");
   };
@@ -448,13 +454,14 @@ function renderSend(list){
   }
   if(list.includes(24) && !addrOk()){ location.replace("#/address/"+list.join(",")); return; }
   document.title="Send my answers";
-  const needName=!studentName();
   const {subject,body}=buildEmail(list);
   const href=`mailto:${encodeURIComponent(SEND_TO).replace(/%40/g,"@")}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   const range=list.length===1?`Lesson ${list[0]}`:`${list.length} lessons`;
   app.innerHTML=`<div class="bar"><div class="wrap"><button class="back" type="button" onclick="location.hash='#/'">‹ All lessons</button><span class="status" id="status"></span></div></div>
   <main class="wrap page form"><h2>Send ${range}</h2>
-  ${needName?`<label for="sn">Your name</label><input id="sn" autocomplete="name" placeholder="Write your name"><p class="err" id="err" role="alert"></p>`:""}
+  <label for="sn">Your name</label><input id="sn" autocomplete="name" value="${esc(studentName())}" placeholder="Write your name">
+  <label for="se">Your email address <span class="opt">(optional)</span></label><input id="se" type="email" autocomplete="email" inputmode="email" value="${esc(studentEmail())}" placeholder="name@example.com">
+  <p class="err" id="err" role="alert" style="margin-bottom:12px"></p>
   ${AUTO_SEND?`<button class="btn wide" type="button" id="auto">Send my answers</button><p class="hint" id="sendmsg" role="status"></p>`:""}
   <a class="btn ${AUTO_SEND?"ghost":""} wide" id="mail" href="${href}" style="margin-top:12px">Open in my email app</a>
   <details class="alt"><summary>Email app didn't open? Copy and paste instead</summary>
@@ -468,12 +475,15 @@ function renderSend(list){
   <textarea id="pv" class="preview" readonly>${esc(body)}</textarea>
   </main>`;
   window.scrollTo(0,0);
-  if(needName){
-    const sn=document.getElementById("sn");
-    sn.addEventListener("input",()=>{ state.name=sn.value; save(); const em=buildEmail(list); document.getElementById("subj").textContent=em.subject; document.getElementById("pv").value=em.body;
-      document.getElementById("mail").href=`mailto:${SEND_TO}?subject=${encodeURIComponent(em.subject)}&body=${encodeURIComponent(em.body)}`; });
-  }
-  const nameCheck=()=>{ if(needName && !studentName()){ document.getElementById("err").textContent="Write your name first so we know who sent these answers."; document.getElementById("sn").focus(); return false; } return true; };
+  const sn=document.getElementById("sn"), se=document.getElementById("se");
+  const refresh=()=>{ const em=buildEmail(list); document.getElementById("subj").textContent=em.subject; document.getElementById("pv").value=em.body;
+      document.getElementById("mail").href=`mailto:${SEND_TO}?subject=${encodeURIComponent(em.subject)}&body=${encodeURIComponent(em.body)}`; };
+  sn.addEventListener("input",()=>{ state.name=sn.value; save(); refresh(); sn.removeAttribute("aria-invalid"); document.getElementById("err").textContent=""; });
+  se.addEventListener("input",()=>{ state.email=se.value; save(); refresh(); se.removeAttribute("aria-invalid"); document.getElementById("err").textContent=""; });
+  const nameCheck=()=>{ const err=document.getElementById("err"); err.textContent="";
+    if(!studentName()){ err.textContent="Write your name first so we know who sent these answers."; sn.setAttribute("aria-invalid","true"); sn.focus(); return false; }
+    if(!emailOk(studentEmail())){ err.textContent="Check your email address. It should look like name@example.com, or leave it blank."; se.setAttribute("aria-invalid","true"); se.focus(); return false; }
+    return true; };
   document.getElementById("mail").addEventListener("click",ev=>{ if(!nameCheck()) ev.preventDefault(); });
   const auto=document.getElementById("auto");
   if(auto) auto.onclick=async()=>{
@@ -482,6 +492,7 @@ function renderSend(list){
     auto.disabled=true; auto.textContent="Sending…"; msg.textContent="";
     const em=buildEmail(list);
     const payload={_subject:em.subject,_template:"box",_captcha:"false","Student":studentName(),"Lessons":list.join(", ")};
+    if(studentEmail()) payload.email=studentEmail();
     if(list.includes(24)){ const a=state.addr; payload["Mail reward to"]=`${a.name}, ${a.street}${a.unit?", "+a.unit:""}, ${a.city}, ${a.state} ${a.zip}`; }
     payload["Answers"]=em.body;
     try{
@@ -495,7 +506,7 @@ function renderSend(list){
     }
   };
   app.querySelectorAll(".cp").forEach(btn=>btn.onclick=async()=>{
-    if(needName && !studentName()){ document.getElementById("err").textContent="Write your name first so we know who sent these answers."; document.getElementById("sn").focus(); return; }
+    if(!nameCheck()) return;
     const kind=btn.dataset.copy;
     const text = kind==="to" ? SEND_TO : kind==="subj" ? document.getElementById("subj").textContent : document.getElementById("pv").value;
     const label=btn.dataset.label||(btn.dataset.label=btn.textContent);
